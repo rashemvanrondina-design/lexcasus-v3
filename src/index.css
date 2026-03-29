@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================
+    🔒 LEX CASUS — Global Styles
+   ========================================== */
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-950 text-slate-200;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Custom Sleek Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(251, 191, 36, 0.1);
+    border-radius: 20px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(251, 191, 36, 0.3);
+  }
+
+  /* Fix for Chrome/Safari Autofill background colors */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px #0f172a inset;
+    -webkit-text-fill-color: #ffffff;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+@layer components {
+  /* 📚 PROSE STYLES: This handles the AI's legal output formatting */
+  .prose-sm {
+    @apply leading-relaxed text-slate-300;
+  }
+
+  .prose-sm p {
+    @apply mb-4 last:mb-0;
+  }
+
+  .prose-sm strong, .prose-sm b {
+    @apply text-white font-bold;
+  }
+
+  /* ⚖️ Legal Citations & Links */
+  .prose-sm a {
+    @apply text-amber-400 underline decoration-amber-400/30 underline-offset-4 hover:text-amber-300 transition-colors;
+  }
+
+  /* 🏛️ Supreme Court Ruling Quotes (The Visual Ruling feature) */
+  .prose-sm blockquote {
+    @apply border-l-4 border-amber-500/50 bg-amber-500/5 pl-4 py-3 my-4 italic text-slate-400 rounded-r-xl;
+  }
+
+  .prose-sm ul {
+    @apply list-disc pl-5 mb-4 space-y-1;
+  }
+
+  .prose-sm ol {
+    @apply list-decimal pl-5 mb-4 space-y-1;
+  }
+
+  .prose-sm h1, .prose-sm h2, .prose-sm h3 {
+    @apply text-slate-100 font-bold mt-6 mb-2 tracking-tight;
+  }
+
+  .prose-sm h1 { @apply text-xl; }
+  .prose-sm h2 { @apply text-lg; }
+  .prose-sm h3 { @apply text-base uppercase text-amber-400/80 text-[10px] tracking-widest; }
+
+  /* Code blocks (For RA numbers or Article numbers) */
+  .prose-sm code {
+    @apply bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded text-[13px] font-mono border border-slate-700/50;
+  }
+
+  /* Tables for comparison (e.g. Theft vs Robbery) */
+  .prose-sm table {
+    @apply w-full border-collapse my-4 text-sm bg-slate-900/40 rounded-xl overflow-hidden border border-slate-800;
+  }
+
+  .prose-sm th {
+    @apply bg-slate-800/80 text-white font-semibold p-3 text-left border-b border-slate-700;
+  }
+
+  .prose-sm td {
+    @apply p-3 border-b border-slate-800 text-slate-400;
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation: animate-in 0.3s ease-out forwards;
+  }
+
+  @keyframes animate-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
