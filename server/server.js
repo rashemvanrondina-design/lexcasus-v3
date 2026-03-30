@@ -7,15 +7,15 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
-// 1. Define allowed origins
+// 1. Allowed origins
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5177',
   'http://localhost:5204',
-  /\.vercel\.app$/ // Matches any Vercel preview deployment
+  /\.vercel\.app$/
 ];
 
-// 2. Configure CORS correctly
+// 2. CORS Configuration
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
@@ -28,27 +28,33 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'] // 👈 CRITICAL: Added Authorization here
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
-// Ensure OPTIONS requests return a 200 OK immediately
 app.options(/.*/, cors());
 
 // 3. Middlewares
-app.use(helmet({
-  crossOriginResourcePolicy: false,
-}));
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(morgan('dev'));
 app.use(express.json());
 
-// 🤖 AI SETUP
+// 🤖 AI SETUP - Use the stable model string
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "Gemini 3 Flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+// ==========================================
+// 📊 ADMIN ANALYTICS (Fixed: Now standalone)
+// ==========================================
+app.get('/api/admin/analytics', (req, res) => {
+  res.json({ 
+    success: true, 
+    data: { totalQuestions: 0, totalUsers: 1 } 
+  });
+});
 
 // ==========================================
 // ⚖️ THE ALAC GRADING ENGINE
 // ==========================================
-// 👈 FIXED: Renamed route and removed the broken syntax
 app.post('/api/grade-answer', async (req, res) => {
   const { studentAnswer } = req.body;
 
@@ -56,14 +62,9 @@ app.post('/api/grade-answer', async (req, res) => {
     return res.status(400).json({ success: false, message: "Answer is empty." });
   }
 
-app.get('/api/admin/analytics', async (req, res) => {
-  res.json({ success: true, data: { totalQuestions: 0, totalUsers: 0 } });
-});
-
   try {
     const prompt = `
       You are an expert Philippine Bar Examiner. Grade the following student answer.
-      
       STRICT GRADING RULES:
       1. Use the ALAC Method (Issue, Law, Analysis, Conclusion).
       2. Provide a Score from 0 to 100.
@@ -84,7 +85,10 @@ app.get('/api/admin/analytics', async (req, res) => {
     const responseText = result.response.text();
     
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("AI did not return valid JSON");
+    if (!jsonMatch) {
+      console.error("AI format error:", responseText);
+      return res.status(500).json({ success: false, message: "AI response format error." });
+    }
     
     const gradedResult = JSON.parse(jsonMatch[0]);
     res.json({ success: true, ...gradedResult });
@@ -98,7 +102,6 @@ app.get('/api/admin/analytics', async (req, res) => {
 // ==========================================
 // 🏛️ JURISPRUDENCE CHAT
 // ==========================================
-// 👈 Kept as /api/ask-legal-ai
 app.post('/api/ask-legal-ai', async (req, res) => {
   const { query, history = [] } = req.body;
 
