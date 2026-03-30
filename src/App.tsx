@@ -6,7 +6,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage'; 
-import { DashboardPage } from './pages/Dashboard'; 
+import { DashboardMain } from './pages/DashboardMain';
 import { PracticePage } from './pages/PracticePage';
 import { ChatPage } from './pages/ChatPage';
 import { AdminPage } from './pages/AdminPage';
@@ -42,7 +42,7 @@ export default function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <DashboardMain />
               </ProtectedRoute>
             }
           />

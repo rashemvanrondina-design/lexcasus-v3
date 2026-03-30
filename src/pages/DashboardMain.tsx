@@ -101,7 +101,7 @@ const subjects: Subject[] = [
   },
 ];
 
-export function DashboardPage() {
+export function DashboardMain() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
