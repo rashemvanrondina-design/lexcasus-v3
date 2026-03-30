@@ -19,31 +19,23 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// 1. Allowed origins
+// 1. Allowed origins - SIMPLIFIED FOR VERCEL
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5177',
   'http://localhost:5204',
-  /\.vercel\.app$/
+  'https://lexcasus-v3.vercel.app' // 👈 Explicit string, no Regex
 ];
 
-// 2. CORS Configuration
+// 2. CORS Configuration - SIMPLIFIED
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (allowed instanceof RegExp) return allowed.test(origin);
-      return allowed === origin;
-    });
-    if (isAllowed) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
-  },
+  origin: allowedOrigins, // 👈 Direct array mapping prevents callback crashes
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
-app.options(/.*/, cors());
+app.options('*', cors()); // Allow preflight on all routes
 
 // 3. Middlewares
 app.use(helmet({ crossOriginResourcePolicy: false }));
@@ -87,7 +79,6 @@ app.post('/api/grade-answer', async (req, res) => {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // 1. We wrap the prompt to be extremely strict about the format
     const prompt = `
       Perform a legal evaluation of this Philippine Bar answer using the ALAC method.
       
@@ -106,13 +97,10 @@ app.post('/api/grade-answer', async (req, res) => {
     const response = await result.response;
     let text = response.text();
 
-    // 2. 🧹 ULTRA CLEANUP: Remove backticks, "json" labels, and whitespace
-    // This prevents the 500 error caused by JSON.parse failing
     text = text.replace(/```json/g, "")
                .replace(/```/g, "")
                .trim();
 
-    // 3. Find the first '{' and the last '}' to isolate the JSON
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     
@@ -158,10 +146,11 @@ app.post('/api/ask-legal-ai', async (req, res) => {
   }
 });
 
-
+// ==========================================
+// 📚 GET QUESTIONS
+// ==========================================
 app.post('/api/get-questions', async (req, res) => {
   try {
-    // 1. Log the incoming request to see if 'topic' is actually arriving
     console.log("Incoming Fetch Request Body:", req.body);
     
     const { topic } = req.body;
@@ -171,7 +160,6 @@ app.post('/api/get-questions', async (req, res) => {
       return res.status(400).json({ success: false, message: "Topic is required." });
     }
 
-    // 2. Ensure the db connection is alive
     if (!db) {
       throw new Error("Firestore Database (db) is not initialized.");
     }
@@ -192,7 +180,6 @@ app.post('/api/get-questions', async (req, res) => {
     });
 
   } catch (error) {
-    // 3. This will print the EXACT error in your Render logs
     console.error("CRITICAL FETCH ERROR:", error.message);
     res.status(500).json({ 
       success: false, 
@@ -203,7 +190,7 @@ app.post('/api/get-questions', async (req, res) => {
 });
 
 // ==========================================
-// 📝 SAVE NEW QUESTION (Restored & Aligned)
+// 📝 SAVE NEW QUESTION
 // ==========================================
 app.post('/api/save-question', async (req, res) => {
   const { mainSubject, subSubject, questionText, suggestedAnswer } = req.body;
@@ -214,7 +201,7 @@ app.post('/api/save-question', async (req, res) => {
   try {
     const docRef = await db.collection('questions').add({
       subject: mainSubject,
-      topic: subSubject, // This matches the 'topic' used in get-questions
+      topic: subSubject, 
       text: questionText,
       answer: suggestedAnswer,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
