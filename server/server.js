@@ -75,7 +75,7 @@ app.get('/api/admin/analytics', async (req, res) => {
 });
 
 // ==========================================
-// ⚖️ THE HARDENED ALAC GRADING ENGINE
+// ⚖️ DEFENSIVE ALAC GRADING ENGINE
 // ==========================================
 app.post('/api/grade-answer', async (req, res) => {
   const { studentAnswer } = req.body;
@@ -85,14 +85,16 @@ app.post('/api/grade-answer', async (req, res) => {
   }
 
   try {
-    // 1. Force the model to be 1.5-flash
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+    // 1. We wrap the prompt to be extremely strict about the format
     const prompt = `
-      Evaluate this Philippine Bar student answer using the ALAC method. 
-      Student Answer: "${studentAnswer}"
+      Perform a legal evaluation of this Philippine Bar answer using the ALAC method.
       
-      Respond ONLY with a JSON object in this exact format:
+      Student Answer: "${studentAnswer}"
+
+      Return ONLY a raw JSON object. Do not include markdown code blocks, backticks, or introductory text.
+      
       {
         "score": number,
         "critique": "string",
@@ -101,28 +103,38 @@ app.post('/api/grade-answer', async (req, res) => {
     `;
 
     const result = await model.generateContent(prompt);
-    // 💡 CRITICAL FIX: Ensure we await the response text correctly
     const response = await result.response;
-    const responseText = response.text();
+    let text = response.text();
+
+    // 2. 🧹 ULTRA CLEANUP: Remove backticks, "json" labels, and whitespace
+    // This prevents the 500 error caused by JSON.parse failing
+    text = text.replace(/```json/g, "")
+               .replace(/```/g, "")
+               .trim();
+
+    // 3. Find the first '{' and the last '}' to isolate the JSON
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
     
-    // 2. Robust JSON extraction (removes markdown backticks like ```json)
-    const cleanedText = responseText.replace(/```json|```/g, "").trim();
-    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
-    
-    if (!jsonMatch) {
-      console.error("AI response didn't contain JSON:", responseText);
-      throw new Error("Invalid AI response format");
+    if (start === -1 || end === -1) {
+      console.error("AI did not return valid JSON structure:", text);
+      throw new Error("AI response format invalid");
     }
-    
-    const gradedResult = JSON.parse(jsonMatch[0]);
-    res.json({ success: true, ...gradedResult });
+
+    const jsonString = text.substring(start, end + 1);
+    const gradedResult = JSON.parse(jsonString);
+
+    res.json({ 
+      success: true, 
+      ...gradedResult 
+    });
 
   } catch (error) {
-    console.error("AI GRADING ERROR:", error);
+    console.error("GRADELINE ERROR:", error.message);
     res.status(500).json({ 
       success: false, 
-      message: "AI Grading Engine error.",
-      details: error.message 
+      message: "AI Grading failed. Please try a more detailed answer.",
+      error: error.message 
     });
   }
 });
