@@ -1,353 +1,222 @@
-// pages/PracticePage.tsx
-import React from 'react';
-import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { fetchQuestions, gradeAnswer } from '../api/client'; // 👈 Swapped checkAnswer for gradeAnswer!
-import { formatLegalText } from '../utils/security'; // 👈 Swapped sanitizeHtml for formatLegalText!
-import type { BarQuestion } from '../types';
-import {
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { fetchQuestions, gradeAnswer } from '../api/client';
+import { 
+  BookOpen, 
+  ChevronRight, 
+  Loader2, 
+  AlertCircle, 
+  CheckCircle2, 
   ArrowLeft,
-  Send,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  RotateCcw,
-  BookOpen,
-  Award, // 🆕 Icon for the score
-  MessageSquareWarning // 🆕 Icon for the critique
+  Send
 } from 'lucide-react';
 
+const SUBJECT_MAPPING: Record<string, string[]> = {
+  "Political Law": ["Constitutional Law I", "Constitutional Law II", "Administrative Law", "Law on Public Officers", "Public International Law"],
+  "Civil Law": ["Persons and Family Relations", "Property and Land Law", "Wills and Succession", "Obligations and Contracts", "Sales and Lease"],
+  "Criminal Law": ["Book I", "Book II", "Special Penal Laws"],
+  "Labor Law": ["Labor Standards", "Labor Relations", "Social Legislation"],
+  "Taxation Law": ["General Principles", "Income Tax", "Local/Real Property Tax"],
+  "Remedial Law": ["Civil Procedure", "Criminal Procedure", "Evidence", "Special Proceedings"],
+  "Legal Ethics": ["Code of Professional Responsibility", "Judicial Ethics"],
+  "Commercial Law": ["Corporation Law", "Negotiable Instruments", "Insurance", "Transportation Law"]
+};
+
 export function PracticePage() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const subject = searchParams.get('subject') || '';
-
-  const [questions, setQuestions] = useState<BarQuestion[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answer, setAnswer] = useState('');
   
-  // 🆕 Expanded State for the Auto-Grader
-  const [modelAnswer, setModelAnswer] = useState('');
-  const [score, setScore] = useState<number | null>(null);
-  const [critique, setCritique] = useState('');
-
-  const [isLoading, setIsLoading] = useState(true);
+  // State Management
+  const [step, setStep] = useState<'subject' | 'topic' | 'quiz'>('subject');
+  const [selectedMain, setSelectedMain] = useState("");
+  const [selectedTopic, setSelectedTopic] = useState("");
+  
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  
+  const [isLoading, setIsLoading] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
-  const [error, setError] = useState('');
-  const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+  const [result, setResult] = useState<any>(null);
 
-  const loadQuestions = useCallback(async () => {
-    if (!subject) return;
+  // 🌍 1. Load Questions based on SPECIFIC Topic
+  const startPractice = async (topic: string) => {
+    setSelectedTopic(topic);
     setIsLoading(true);
-    setError('');
+    setStep('quiz');
+    
     try {
-      const res = await fetchQuestions(subject);
-      if (res.success && res.questions.length > 0) {
-        setQuestions(res.questions);
-      } else {
-        setError('No questions available for this subject yet. Check back soon!');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load questions.');
-    }
-    setIsLoading(false);
-  }, [subject]);
-
-  useEffect(() => {
-    loadQuestions();
-  }, [loadQuestions]);
-
-  const currentQuestion = questions[currentIndex];
-  const isAnswered = currentQuestion ? answeredQuestions.has(currentQuestion.id) : false;
-  const isLastQuestion = currentIndex >= questions.length - 1;
-
-  const handleSubmitAnswer = async () => {
-    if (!currentQuestion || isAnswered) return;
-
-    const words = answer.trim().split(/\s+/);
-    if (answer.trim().length < 50 || words.length < 10) {
-      setError('Your answer must be at least 50 characters and 10 words. Show your legal reasoning!');
-      return;
-    }
-
-    setIsGrading(true);
-    setError('');
-    try {
-      // 🆕 Calling the new AI Auto-Grader!
-      const res = await gradeAnswer(currentQuestion.id, answer);
+      const res = await fetchQuestions(topic); // Backend now filters by 'topic'
       if (res.success) {
-        setModelAnswer(res.suggestedAnswer);
-        setScore(res.score);
-        setCritique(res.critique);
-        setAnsweredQuestions((prev) => new Set([...prev, currentQuestion.id]));
-      } else {
-        setError('Failed to grade answer. Please try again.');
+        setQuestions(res.questions);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      console.error("Fetch Error:", err);
+    } finally {
+      setIsLoading(false);
     }
-    setIsGrading(false);
   };
 
-  const handleNext = () => {
-    if (isLastQuestion) return;
-    setModelAnswer('');
-    setScore(null); // 🆕 Reset score
-    setCritique(''); // 🆕 Reset critique
-    setAnswer('');
-    setError('');
-    setCurrentIndex((i) => i + 1);
+  // ⚖️ 2. Handle ALAC Grading
+  const handleSubmit = async () => {
+    if (!answer.trim()) return;
+    setIsGrading(true);
+    try {
+      const res = await gradeAnswer(questions[currentIndex].id, answer);
+      if (res.success) {
+        setResult(res);
+      }
+    } catch (err) {
+      alert("Grading failed. Try again.");
+    } finally {
+      setIsGrading(false);
+    }
   };
 
-  const handleReset = () => {
-    setCurrentIndex(0);
-    setModelAnswer('');
-    setScore(null);
-    setCritique('');
-    setAnswer('');
-    setError('');
-    setAnsweredQuestions(new Set());
-  };
+  // --- UI RENDERERS ---
 
-  // 🆕 Helper to color-code the score badge
-  const getScoreColor = (s: number) => {
-    if (s >= 85) return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
-    if (s >= 75) return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
-    return 'text-red-400 bg-red-400/10 border-red-400/20';
-  };
-
-  if (!subject) {
+  if (step === 'subject') {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-slate-950">
-        <div className="text-center">
-          <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">No Subject Selected</h2>
-          <p className="text-slate-400 mb-6">Go back to the dashboard and pick a subject to practice.</p>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-amber-400/10 border border-amber-400/20 text-amber-400 hover:bg-amber-400/20 transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
+      <div className="min-h-screen bg-slate-950 p-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold text-white mb-2">Select Subject</h1>
+          <p className="text-slate-400 mb-8 text-sm">Choose a core Bar subject to begin.</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.keys(SUBJECT_MAPPING).map((sub) => (
+              <button
+                key={sub}
+                onClick={() => { setSelectedMain(sub); setStep('topic'); }}
+                className="p-6 bg-slate-900/50 border border-slate-800 rounded-2xl flex items-center justify-between hover:border-emerald-500 transition-all group"
+              >
+                <span className="text-white font-semibold">{sub}</span>
+                <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-emerald-500" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'topic') {
+    return (
+      <div className="min-h-screen bg-slate-950 p-8">
+        <div className="max-w-4xl mx-auto">
+          <button onClick={() => setStep('subject')} className="text-slate-500 hover:text-white flex items-center gap-2 mb-6 text-sm">
+            <ArrowLeft className="w-4 h-4" /> Back to Subjects
           </button>
+          <h1 className="text-2xl font-bold text-white mb-2">{selectedMain}</h1>
+          <p className="text-slate-400 mb-8 text-sm">Select a specific topic to narrow your focus.</p>
+          
+          <div className="grid gap-3">
+            {SUBJECT_MAPPING[selectedMain].map((topic) => (
+              <button
+                key={topic}
+                onClick={() => startPractice(topic)}
+                className="p-5 bg-slate-900/50 border border-slate-800 rounded-xl text-left hover:bg-emerald-600/10 hover:border-emerald-500 transition-all text-slate-200 font-medium"
+              >
+                {topic}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <div className="border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-sm sticky top-16 z-40">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h1 className="text-sm font-semibold text-white">{subject}</h1>
-              <p className="text-xs text-slate-500">
-                Question {currentIndex + 1} of {questions.length}
-                {answeredQuestions.size > 0 && ` · ${answeredQuestions.size} answered`}
-              </p>
-            </div>
+    <div className="min-h-screen bg-slate-950 p-6 md:p-12">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <button onClick={() => setStep('topic')} className="text-slate-500 hover:text-white flex items-center gap-2">
+            <ArrowLeft className="w-4 h-4" /> Exit Practice
+          </button>
+          <div className="text-right">
+            <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest">{selectedTopic}</span>
+            <p className="text-slate-400 text-xs">Question {currentIndex + 1} of {questions.length || 0}</p>
           </div>
-          {answeredQuestions.size > 0 && (
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white border border-slate-700/50 hover:border-slate-600 transition-all"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Restart
-            </button>
-          )}
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-            <p className="text-slate-400 text-sm">Loading questions from the vault...</p>
+          <div className="py-20 text-center space-y-4">
+            <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto" />
+            <p className="text-slate-400 text-sm italic">Retrieving jurisprudence...</p>
           </div>
-        ) : error && !currentQuestion ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <AlertCircle className="w-8 h-8 text-slate-600" />
-            <p className="text-slate-400 text-sm text-center max-w-md">{error}</p>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="mt-2 px-5 py-2 rounded-lg text-sm font-medium bg-amber-400/10 border border-amber-400/20 text-amber-400 hover:bg-amber-400/20 transition-all"
-            >
-              Back to Dashboard
-            </button>
+        ) : questions.length === 0 ? (
+          <div className="p-12 bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl text-center">
+            <AlertCircle className="w-10 h-10 text-slate-600 mx-auto mb-4" />
+            <h2 className="text-white font-bold text-lg">No Questions Found</h2>
+            <p className="text-slate-500 text-sm mt-2">There are currently no questions for "{selectedTopic}".</p>
           </div>
-        ) : currentQuestion ? (
+        ) : (
           <div className="space-y-6">
             {/* Question Card */}
-            <div className="p-6 sm:p-8 rounded-2xl bg-slate-900/50 border border-slate-800/60">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="px-2.5 py-0.5 rounded-md bg-amber-400/10 text-amber-400 text-xs font-medium">
-                  Q{currentIndex + 1}
-                </span>
-                {isAnswered && (
-                  <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-400/10 text-emerald-400 text-xs font-medium">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Graded
-                  </span>
-                )}
-              </div>
-              <div
-                className="text-white text-base leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: formatLegalText(currentQuestion.question) }} // 👈 Formatting fixed!
-              />
+            <div className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800/60 shadow-2xl">
+              <span className="inline-block px-3 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase mb-4 tracking-tighter">Bar Fact Pattern</span>
+              <p className="text-slate-200 leading-relaxed text-lg">{questions[currentIndex]?.text}</p>
             </div>
 
-            {/* Answer Area */}
-            {!isAnswered ? (
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-slate-300">
-                  Your Legal Analysis
-                </label>
-                <textarea
-                  value={answer}
-                  onChange={(e) => {
-                    setAnswer(e.target.value);
-                    setError('');
-                  }}
-                  disabled={isGrading}
-                  rows={8}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all text-sm resize-none disabled:opacity-50"
-                  placeholder="Provide your legal analysis and reasoning here. Support your answer with applicable laws, jurisprudence, and legal principles..."
-                />
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-slate-600">
-                    {answer.trim().split(/\s+/).filter(Boolean).length} words
-                  </div>
-                  {error && (
-                    <p className="text-xs text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {error}
-                    </p>
-                  )}
-                  <button
-                    onClick={handleSubmitAnswer}
-                    disabled={isGrading || answer.trim().length < 50}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-amber-400 text-slate-950 hover:bg-amber-300 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGrading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Grading...
-                      </>
-                    ) : (
-                      <>
-                        <Award className="w-4 h-4" />
-                        Submit for Grading
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* 🆕 AI Grade Report */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Score Card */}
-                  <div className={`col-span-1 p-6 rounded-2xl border flex flex-col items-center justify-center text-center ${getScoreColor(score || 0)}`}>
-                    <span className="text-sm font-semibold uppercase tracking-wider mb-2 opacity-80">AI Bar Score</span>
-                    <div className="text-5xl font-black mb-1">{score}<span className="text-2xl opacity-50">/100</span></div>
-                  </div>
-                  
-                  {/* Critique Card */}
-                  <div className="col-span-1 md:col-span-2 p-6 rounded-2xl bg-slate-900/80 border border-slate-800/60">
-                     <div className="flex items-center gap-2 mb-3">
-                      <MessageSquareWarning className="w-4 h-4 text-amber-400" />
-                      <h3 className="text-sm font-bold text-amber-400">Examiner's Critique</h3>
+            {/* Answer Box */}
+            <div className="space-y-4">
+               <label className="text-xs font-bold text-slate-500 uppercase ml-2 tracking-widest">Your ALAC Analysis</label>
+               <textarea
+                 value={answer}
+                 onChange={(e) => setAnswer(e.target.value)}
+                 disabled={!!result || isGrading}
+                 className="w-full h-64 bg-slate-900 border border-slate-800 rounded-3xl p-6 text-white placeholder-slate-600 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all resize-none"
+                 placeholder="State the Issue, the Law, your Analysis, and the Conclusion..."
+               />
+               
+               {!result ? (
+                 <button
+                   onClick={handleSubmit}
+                   disabled={!answer.trim() || isGrading}
+                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-5 rounded-2xl transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20"
+                 >
+                   {isGrading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> Submit for ALAC Grading</>}
+                 </button>
+               ) : (
+                 <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex items-center justify-between">
+                       <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                         <CheckCircle2 className="w-6 h-6 text-emerald-500" /> AI Evaluation
+                       </h3>
+                       <div className="px-4 py-2 bg-emerald-500 rounded-xl text-slate-950 font-black text-xl">
+                          {result.score}/100
+                       </div>
                     </div>
-                    <div
-                      className="text-sm text-slate-300 leading-relaxed prose-sm"
-                      dangerouslySetInnerHTML={{ __html: formatLegalText(critique) }}
-                    />
-                  </div>
-                </div>
-
-                {/* Your Answer (Read Only) */}
-                <div className="p-6 rounded-2xl bg-slate-900/30 border border-slate-800/40">
-                  <h3 className="text-sm font-medium text-slate-400 mb-3">Your Answer</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">{answer}</p>
-                </div>
-
-                {/* Suggested Model Answer */}
-                {modelAnswer && (
-                  <div className="p-6 rounded-2xl bg-emerald-400/5 border border-emerald-400/20 mt-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <h3 className="text-sm font-bold text-emerald-400">Suggested ALAC Answer</h3>
+                    
+                    <div className="space-y-4">
+                       <div>
+                         <h4 className="text-xs font-bold text-emerald-500 uppercase mb-1">Critique</h4>
+                         <p className="text-slate-300 text-sm leading-relaxed">{result.critique}</p>
+                       </div>
+                       <div>
+                         <h4 className="text-xs font-bold text-amber-500 uppercase mb-1">Master Answer</h4>
+                         <p className="text-slate-300 text-sm italic leading-relaxed">{result.suggestedAnswer}</p>
+                       </div>
                     </div>
-                    <div
-                      className="text-sm text-slate-300 leading-relaxed prose-sm"
-                      dangerouslySetInnerHTML={{ __html: formatLegalText(modelAnswer) }} // 👈 Formatting fixed!
-                    />
-                  </div>
-                )}
 
-                {/* Next Button */}
-                {!isLastQuestion && (
-                  <div className="flex justify-end pt-4">
-                    <button
-                      onClick={handleNext}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold bg-amber-400 text-slate-950 hover:bg-amber-300 transition-all shadow-lg shadow-amber-500/20"
+                    <button 
+                      onClick={() => {
+                        setResult(null);
+                        setAnswer("");
+                        if (currentIndex < questions.length - 1) {
+                          setCurrentIndex(prev => prev + 1);
+                        } else {
+                          setStep('topic'); // Go back if finished
+                        }
+                      }}
+                      className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all"
                     >
-                      Next Question
-                      <ArrowLeft className="w-4 h-4 rotate-180" />
+                      {currentIndex < questions.length - 1 ? "Next Question" : "Finish Practice"}
                     </button>
-                  </div>
-                )}
-
-                {isLastQuestion && (
-                  <div className="p-6 rounded-2xl bg-amber-400/5 border border-amber-400/20 text-center mt-6">
-                    <p className="text-base font-semibold text-white mb-2">Session Complete! 🎉</p>
-                    <p className="text-sm text-slate-400 mb-4">
-                      You answered {answeredQuestions.size} question{answeredQuestions.size !== 1 ? 's' : ''} in {subject}.
-                    </p>
-                    <div className="flex items-center justify-center gap-3">
-                      <button
-                        onClick={handleReset}
-                        className="px-5 py-2 rounded-xl text-sm font-medium border border-slate-700/50 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
-                      >
-                        Practice Again
-                      </button>
-                      <button
-                        onClick={() => navigate('/dashboard')}
-                        className="px-5 py-2 rounded-xl text-sm font-medium bg-amber-400 text-slate-950 hover:bg-amber-300 transition-all"
-                      >
-                        Back to Dashboard
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Progress Bar */}
-            {questions.length > 0 && (
-              <div className="pt-4">
-                <div className="h-1 bg-slate-800/60 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-amber-400 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${((currentIndex + (isAnswered ? 1 : 0)) / questions.length) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+                 </div>
+               )}
+            </div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

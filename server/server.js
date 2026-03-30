@@ -149,25 +149,21 @@ app.post('/api/ask-legal-ai', async (req, res) => {
 // 📚 GET QUESTIONS BY SUBJECT
 // ==========================================
 app.post('/api/get-questions', async (req, res) => {
-  const { subject } = req.body;
+  const { topic } = req.body; // 👈 Change this to 'topic'
 
   try {
     const questionsRef = db.collection('questions');
-    // We query based on the 'subject' field saved during 'save-question'
-    const snapshot = await questionsRef.where('subject', '==', subject).get();
+    // 🔍 Query specifically by the sub-subject (e.g., "Constitutional Law I")
+    const snapshot = await questionsRef.where('topic', '==', topic).get();
 
     const questions = [];
     snapshot.forEach(doc => {
       questions.push({ id: doc.id, ...doc.data() });
     });
 
-    res.json({ 
-      success: true, 
-      questions: questions 
-    });
+    res.json({ success: true, questions });
   } catch (error) {
-    console.error("Fetch Questions Error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch questions." });
+    res.status(500).json({ success: false, message: "Fetch failed." });
   }
 });
 
