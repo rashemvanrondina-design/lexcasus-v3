@@ -146,6 +146,32 @@ app.post('/api/ask-legal-ai', async (req, res) => {
 });
 
 // ==========================================
+// 📚 GET QUESTIONS BY SUBJECT
+// ==========================================
+app.post('/api/get-questions', async (req, res) => {
+  const { subject } = req.body;
+
+  try {
+    const questionsRef = db.collection('questions');
+    // We query based on the 'subject' field saved during 'save-question'
+    const snapshot = await questionsRef.where('subject', '==', subject).get();
+
+    const questions = [];
+    snapshot.forEach(doc => {
+      questions.push({ id: doc.id, ...doc.data() });
+    });
+
+    res.json({ 
+      success: true, 
+      questions: questions 
+    });
+  } catch (error) {
+    console.error("Fetch Questions Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch questions." });
+  }
+});
+
+// ==========================================
 // 📝 SAVE NEW QUESTION TO FIRESTORE
 // ==========================================
 app.post('/api/save-question', async (req, res) => {
