@@ -144,5 +144,41 @@ app.post('/api/ask-legal-ai', async (req, res) => {
   }
 });
 
+// ==========================================
+// 📝 SAVE NEW QUESTION TO FIRESTORE
+// ==========================================
+app.post('/api/save-question', async (req, res) => {
+  const { mainSubject, subSubject, questionText, suggestedAnswer } = req.body;
+
+  // Basic validation
+  if (!mainSubject || !subSubject || !questionText || !suggestedAnswer) {
+    return res.status(400).json({ success: false, message: "All fields are required." });
+  }
+
+  try {
+    const questionsRef = db.collection('questions');
+    
+    const newQuestion = {
+      subject: mainSubject,    // Matches the 'subject' field used in /api/get-questions
+      topic: subSubject,      // Extra detail
+      text: questionText,
+      answer: suggestedAnswer,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: "Admin"
+    };
+
+    const docRef = await questionsRef.add(newQuestion);
+
+    res.json({ 
+      success: true, 
+      message: "Question synced to Firestore!",
+      id: docRef.id 
+    });
+  } catch (error) {
+    console.error("Firestore Save Error:", error);
+    res.status(500).json({ success: false, message: "Failed to save to database." });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Lex Casus Engine running on port ${PORT}`));

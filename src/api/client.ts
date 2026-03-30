@@ -127,3 +127,23 @@ export async function fetchAdminAnalytics(): Promise<{ success: boolean; data: A
     method: 'GET',
   });
 }
+/** 🆕 Admin: Sync a new Bar Exam question to Firestore */
+export async function saveAdminQuestion(questionData: {
+  mainSubject: string;
+  subSubject: string;
+  questionText: string;
+  suggestedAnswer: string;
+}): Promise<{ success: boolean; message: string; id?: string }> {
+  return secureFetch<{ success: boolean; message: string; id?: string }>(
+    '/api/save-question',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        mainSubject: sanitizeText(questionData.mainSubject),
+        subSubject: sanitizeText(questionData.subSubject),
+        questionText: sanitizeText(questionData.questionText),
+        suggestedAnswer: sanitizeText(questionData.suggestedAnswer),
+      }),
+    }
+  );
+}
