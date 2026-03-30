@@ -7,6 +7,18 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
+// ==========================================
+// 🔐 FIREBASE ADMIN SETUP
+// ==========================================
+// Ensure you have added FIREBASE_SERVICE_ACCOUNT to Render Env Variables
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
+
 // 1. Allowed origins
 const allowedOrigins = [
   'http://localhost:5173',
@@ -45,11 +57,21 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 // ==========================================
 // 📊 ADMIN ANALYTICS (Fixed: Now standalone)
 // ==========================================
-app.get('/api/admin/analytics', (req, res) => {
-  res.json({ 
-    success: true, 
-    data: { totalQuestions: 0, totalUsers: 1 } 
-  });
+app.get('/api/admin/analytics', async (req, res) => {
+  try {
+    const usersSnapshot = await db.collection('users').count().get();
+    const questionsSnapshot = await db.collection('questions').count().get();
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        totalUsers: usersSnapshot.data().count, 
+        totalQuestions: questionsSnapshot.data().count 
+      } 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Analytics fetch failed." });
+  }
 });
 
 // ==========================================
