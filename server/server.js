@@ -78,23 +78,21 @@ app.get('/api/admin/analytics', async (req, res) => {
 // ⚖️ THE HARDENED ALAC GRADING ENGINE
 // ==========================================
 app.post('/api/grade-answer', async (req, res) => {
-  const { studentAnswer, questionId } = req.body;
+  const { studentAnswer } = req.body;
 
   if (!studentAnswer) {
     return res.status(400).json({ success: false, message: "Answer is empty." });
   }
 
   try {
-    // 1. Ensure model is initialized with the CORRECT name
+    // 1. Force the model to be 1.5-flash
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-      You are an expert Philippine Bar Examiner. 
-      Grade this student answer using the ALAC method (Issue, Law, Analysis, Conclusion).
+      Evaluate this Philippine Bar student answer using the ALAC method. 
+      Student Answer: "${studentAnswer}"
       
-      STUDENT ANSWER: "${studentAnswer}"
-
-      STRICT RESPONSE FORMAT (JSON ONLY):
+      Respond ONLY with a JSON object in this exact format:
       {
         "score": number,
         "critique": "string",
@@ -103,28 +101,28 @@ app.post('/api/grade-answer', async (req, res) => {
     `;
 
     const result = await model.generateContent(prompt);
-    const responseText = await result.response.text();
+    // 💡 CRITICAL FIX: Ensure we await the response text correctly
+    const response = await result.response;
+    const responseText = response.text();
     
-    // 2. Safe JSON Extraction
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    // 2. Robust JSON extraction (removes markdown backticks like ```json)
+    const cleanedText = responseText.replace(/```json|```/g, "").trim();
+    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
-      console.error("AI failed to provide JSON. Raw response:", responseText);
-      return res.status(500).json({ 
-        success: false, 
-        message: "AI Grading format error. Please try again." 
-      });
+      console.error("AI response didn't contain JSON:", responseText);
+      throw new Error("Invalid AI response format");
     }
     
     const gradedResult = JSON.parse(jsonMatch[0]);
     res.json({ success: true, ...gradedResult });
 
   } catch (error) {
-    console.error("AI GRADING CRASH:", error.message);
+    console.error("AI GRADING ERROR:", error);
     res.status(500).json({ 
       success: false, 
-      message: "The AI Engine is currently overloaded or misconfigured.",
-      error: error.message 
+      message: "AI Grading Engine error.",
+      details: error.message 
     });
   }
 });
