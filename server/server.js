@@ -56,6 +56,10 @@ app.post('/api/grade-answer', async (req, res) => {
     return res.status(400).json({ success: false, message: "Answer is empty." });
   }
 
+app.get('/api/admin/analytics', async (req, res) => {
+  res.json({ success: true, data: { totalQuestions: 0, totalUsers: 0 } });
+});
+
   try {
     const prompt = `
       You are an expert Philippine Bar Examiner. Grade the following student answer.
