@@ -48,6 +48,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 // ==========================================
 // ⚖️ THE ALAC GRADING ENGINE
 // ==========================================
+// 👈 FIXED: Renamed route and removed the broken syntax
 app.post('/api/grade-answer', async (req, res) => {
   const { studentAnswer } = req.body;
 
@@ -93,6 +94,7 @@ app.post('/api/grade-answer', async (req, res) => {
 // ==========================================
 // 🏛️ JURISPRUDENCE CHAT
 // ==========================================
+// 👈 Kept as /api/ask-legal-ai
 app.post('/api/ask-legal-ai', async (req, res) => {
   const { query, history = [] } = req.body;
 
