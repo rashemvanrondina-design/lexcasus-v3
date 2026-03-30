@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const admin = require('firebase-admin'); // 👈 This is the missing line!
+const express = require('express');
 require('dotenv').config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
