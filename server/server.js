@@ -11,7 +11,6 @@ const app = express();
 // ==========================================
 // 🔐 FIREBASE ADMIN SETUP
 // ==========================================
-// Ensure you have added FIREBASE_SERVICE_ACCOUNT to Render Env Variables
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -51,12 +50,12 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(morgan('dev'));
 app.use(express.json());
 
-// 🤖 AI SETUP - Use the stable model string
+// 🤖 AI SETUP - Fixed to stable 1.5 model
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // ==========================================
-// 📊 ADMIN ANALYTICS (Fixed: Now standalone)
+// 📊 ADMIN ANALYTICS
 // ==========================================
 app.get('/api/admin/analytics', async (req, res) => {
   try {
@@ -80,44 +79,21 @@ app.get('/api/admin/analytics', async (req, res) => {
 // ==========================================
 app.post('/api/grade-answer', async (req, res) => {
   const { studentAnswer } = req.body;
-
-  if (!studentAnswer) {
-    return res.status(400).json({ success: false, message: "Answer is empty." });
-  }
+  if (!studentAnswer) return res.status(400).json({ success: false, message: "Answer is empty." });
 
   try {
-    const prompt = `
-      You are an expert Philippine Bar Examiner. Grade the following student answer.
-      STRICT GRADING RULES:
-      1. Use the ALAC Method (Issue, Law, Analysis, Conclusion).
-      2. Provide a Score from 0 to 100.
-      3. Provide a short, constructive Critique.
-      4. Provide a Suggested "Perfect" Answer.
-
+    const prompt = `Grade this Philippine Bar student answer using ALAC Method. Score 0-100. Critique. Suggested Answer.
       STUDENT ANSWER: "${studentAnswer}"
-
-      RESPONSE FORMAT (JSON ONLY):
-      {
-        "score": number,
-        "critique": "string",
-        "suggestedAnswer": "string"
-      }
-    `;
+      FORMAT: JSON {score: number, critique: string, suggestedAnswer: string}`;
 
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();
-    
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("AI format error:", responseText);
-      return res.status(500).json({ success: false, message: "AI response format error." });
-    }
     
-    const gradedResult = JSON.parse(jsonMatch[0]);
-    res.json({ success: true, ...gradedResult });
-
+    if (!jsonMatch) return res.status(500).json({ success: false, message: "AI response error." });
+    
+    res.json({ success: true, ...JSON.parse(jsonMatch[0]) });
   } catch (error) {
-    console.error("Grading Error:", error);
     res.status(500).json({ success: false, message: "AI Grading failed." });
   }
 });
@@ -127,7 +103,6 @@ app.post('/api/grade-answer', async (req, res) => {
 // ==========================================
 app.post('/api/ask-legal-ai', async (req, res) => {
   const { query, history = [] } = req.body;
-
   try {
     const chat = model.startChat({
       history: history.map(h => ({
@@ -135,71 +110,47 @@ app.post('/api/ask-legal-ai', async (req, res) => {
         parts: [{ text: h.text }],
       })),
     });
-
     const result = await chat.sendMessage(query);
     res.json({ success: true, answer: result.response.text() });
-
   } catch (error) {
-    console.error("Chat Error:", error);
     res.status(500).json({ success: false, message: "AI Chat failed." });
   }
 });
 
 // ==========================================
-// 📚 GET QUESTIONS BY SUBJECT
+// 📚 GET QUESTIONS (The Specific Fetch)
 // ==========================================
 app.post('/api/get-questions', async (req, res) => {
-  const { topic } = req.body; // 👈 Change this to 'topic'
-
+  const { topic } = req.body;
   try {
-    const questionsRef = db.collection('questions');
-    // 🔍 Query specifically by the sub-subject (e.g., "Constitutional Law I")
-    const snapshot = await questionsRef.where('topic', '==', topic).get();
-
-    const questions = [];
-    snapshot.forEach(doc => {
-      questions.push({ id: doc.id, ...doc.data() });
-    });
-
+    const snapshot = await db.collection('questions').where('topic', '==', topic).get();
+    const questions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json({ success: true, questions });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Fetch failed." });
+    res.status(500).json({ success: false, message: "Fetch error" });
   }
 });
 
 // ==========================================
-// 📝 SAVE NEW QUESTION TO FIRESTORE
+// 📝 SAVE NEW QUESTION (Restored & Aligned)
 // ==========================================
 app.post('/api/save-question', async (req, res) => {
   const { mainSubject, subSubject, questionText, suggestedAnswer } = req.body;
-
-  // Basic validation
   if (!mainSubject || !subSubject || !questionText || !suggestedAnswer) {
-    return res.status(400).json({ success: false, message: "All fields are required." });
+    return res.status(400).json({ success: false, message: "All fields required." });
   }
 
   try {
-    const questionsRef = db.collection('questions');
-    
-    const newQuestion = {
-      subject: mainSubject,    // Matches the 'subject' field used in /api/get-questions
-      topic: subSubject,      // Extra detail
+    const docRef = await db.collection('questions').add({
+      subject: mainSubject,
+      topic: subSubject, // This matches the 'topic' used in get-questions
       text: questionText,
       answer: suggestedAnswer,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: "Admin"
-    };
-
-    const docRef = await questionsRef.add(newQuestion);
-
-    res.json({ 
-      success: true, 
-      message: "Question synced to Firestore!",
-      id: docRef.id 
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
+    res.json({ success: true, id: docRef.id });
   } catch (error) {
-    console.error("Firestore Save Error:", error);
-    res.status(500).json({ success: false, message: "Failed to save to database." });
+    res.status(500).json({ success: false, message: "Save failed." });
   }
 });
 
