@@ -75,26 +75,57 @@ app.get('/api/admin/analytics', async (req, res) => {
 });
 
 // ==========================================
-// ⚖️ THE ALAC GRADING ENGINE
+// ⚖️ THE HARDENED ALAC GRADING ENGINE
 // ==========================================
 app.post('/api/grade-answer', async (req, res) => {
-  const { studentAnswer } = req.body;
-  if (!studentAnswer) return res.status(400).json({ success: false, message: "Answer is empty." });
+  const { studentAnswer, questionId } = req.body;
+
+  if (!studentAnswer) {
+    return res.status(400).json({ success: false, message: "Answer is empty." });
+  }
 
   try {
-    const prompt = `Grade this Philippine Bar student answer using ALAC Method. Score 0-100. Critique. Suggested Answer.
+    // 1. Ensure model is initialized with the CORRECT name
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `
+      You are an expert Philippine Bar Examiner. 
+      Grade this student answer using the ALAC method (Issue, Law, Analysis, Conclusion).
+      
       STUDENT ANSWER: "${studentAnswer}"
-      FORMAT: JSON {score: number, critique: string, suggestedAnswer: string}`;
+
+      STRICT RESPONSE FORMAT (JSON ONLY):
+      {
+        "score": number,
+        "critique": "string",
+        "suggestedAnswer": "string"
+      }
+    `;
 
     const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = await result.response.text();
+    
+    // 2. Safe JSON Extraction
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     
-    if (!jsonMatch) return res.status(500).json({ success: false, message: "AI response error." });
+    if (!jsonMatch) {
+      console.error("AI failed to provide JSON. Raw response:", responseText);
+      return res.status(500).json({ 
+        success: false, 
+        message: "AI Grading format error. Please try again." 
+      });
+    }
     
-    res.json({ success: true, ...JSON.parse(jsonMatch[0]) });
+    const gradedResult = JSON.parse(jsonMatch[0]);
+    res.json({ success: true, ...gradedResult });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: "AI Grading failed." });
+    console.error("AI GRADING CRASH:", error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: "The AI Engine is currently overloaded or misconfigured.",
+      error: error.message 
+    });
   }
 });
 
