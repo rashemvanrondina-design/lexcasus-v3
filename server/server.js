@@ -117,17 +117,47 @@ app.post('/api/ask-legal-ai', async (req, res) => {
   }
 });
 
-// ==========================================
-// 📚 GET QUESTIONS (The Specific Fetch)
-// ==========================================
+
 app.post('/api/get-questions', async (req, res) => {
-  const { topic } = req.body;
   try {
-    const snapshot = await db.collection('questions').where('topic', '==', topic).get();
-    const questions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.json({ success: true, questions });
+    // 1. Log the incoming request to see if 'topic' is actually arriving
+    console.log("Incoming Fetch Request Body:", req.body);
+    
+    const { topic } = req.body;
+
+    if (!topic) {
+      console.error("Error: Topic is missing in request body");
+      return res.status(400).json({ success: false, message: "Topic is required." });
+    }
+
+    // 2. Ensure the db connection is alive
+    if (!db) {
+      throw new Error("Firestore Database (db) is not initialized.");
+    }
+
+    const questionsRef = db.collection('questions');
+    const snapshot = await questionsRef.where('topic', '==', topic).get();
+
+    const questions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    console.log(`Successfully fetched ${questions.length} questions for topic: ${topic}`);
+    
+    res.json({ 
+      success: true, 
+      questions: questions 
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: "Fetch error" });
+    // 3. This will print the EXACT error in your Render logs
+    console.error("CRITICAL FETCH ERROR:", error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal Server Error", 
+      error: error.message 
+    });
   }
 });
 
