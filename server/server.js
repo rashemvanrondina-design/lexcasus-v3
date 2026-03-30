@@ -32,7 +32,7 @@ app.use(cors({
 }));
 
 // Ensure OPTIONS requests return a 200 OK immediately
-app.options('*', cors());
+app.options('(.*)', cors());
 
 // 3. Middlewares
 app.use(helmet({
