@@ -73,12 +73,15 @@ async function secureFetch<T>(
 // ==========================================
 
 /** Fetch questions filtered by Bar subject */
-export async function fetchQuestions(subject: string): Promise<QuestionsResponse> {
+export async function fetchQuestions(topic: string): Promise<QuestionsResponse> {
+  console.log("Client sending topic:", topic); // 👈 Debug line
+  
   return secureFetch<QuestionsResponse>(
     '/api/get-questions',
     {
       method: 'POST',
-      body: JSON.stringify({ subject: sanitizeText(subject) }),
+      // The backend expects { "topic": "..." }
+      body: JSON.stringify({ topic: topic }), 
     }
   );
 }
